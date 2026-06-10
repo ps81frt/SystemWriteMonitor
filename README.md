@@ -23,7 +23,8 @@ function SystemWriteMonitor {
     $cpu.NextValue()       | Out-Null
     Start-Sleep 1
 
-    $global:FileLog = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
+    $global:FileLog   = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
+    $global:DedupDict = [System.Collections.Concurrent.ConcurrentDictionary[string,datetime]]::new()
     if (-not (Test-Path $ReportDir)) { New-Item -ItemType Directory -Path $ReportDir | Out-Null }
     $global:CsvPath = Join-Path $ReportDir ("disk_activity_{0}.csv" -f (Get-Date -f 'yyyy-MM-dd_HH-mm-ss'))
     "Date,Heure,Type,Taille_MB,Chemin" | Out-File $global:CsvPath -Encoding UTF8
@@ -43,6 +44,11 @@ function SystemWriteMonitor {
 
         Register-ObjectEvent $w "Created" -Action {
             $path = $Event.SourceEventArgs.FullPath
+            $key  = "CREE|$path"
+            $now  = Get-Date
+            $last = [datetime]::MinValue
+            if ($global:DedupDict.TryGetValue($key, [ref]$last) -and ($now - $last).TotalSeconds -lt 3) { return }
+            $global:DedupDict[$key] = $now
             try {
                 $item = Get-Item $path -ErrorAction Stop
                 if (-not $item.PSIsContainer) {
@@ -63,6 +69,11 @@ function SystemWriteMonitor {
 
         Register-ObjectEvent $w "Changed" -Action {
             $path = $Event.SourceEventArgs.FullPath
+            $key  = "MODIFIE|$path"
+            $now  = Get-Date
+            $last = [datetime]::MinValue
+            if ($global:DedupDict.TryGetValue($key, [ref]$last) -and ($now - $last).TotalSeconds -lt 3) { return }
+            $global:DedupDict[$key] = $now
             try {
                 $item = Get-Item $path -ErrorAction Stop
                 if (-not $item.PSIsContainer) {
@@ -154,7 +165,7 @@ function SystemWriteMonitor {
         $cpu.Dispose()
         foreach ($w in $watchers) { $w.Dispose() }
         Get-EventSubscriber | Unregister-Event -ErrorAction SilentlyContinue
-        Remove-Variable -Name FileLog,CsvPath,MinSizeCreatedMB,MinSizeChangedMB -Scope Global -ErrorAction SilentlyContinue
+        Remove-Variable -Name FileLog,CsvPath,MinSizeCreatedMB,MinSizeChangedMB,DedupDict -Scope Global -ErrorAction SilentlyContinue
     }
 }
 

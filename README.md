@@ -95,7 +95,7 @@ function SystemWriteMonitor {
             $line = ""
             while ($global:FileLog.TryDequeue([ref]$line)) {
                 $history.AddLast($line) | Out-Null
-                if ($history.Count -gt 10) { $history.RemoveFirst() }
+                if ($history.Count -gt 15 { $history.RemoveFirst() }
             }
  
             Write-Host "===== MINI TASK MANAGER =====" -ForegroundColor Cyan
